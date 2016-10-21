@@ -3,6 +3,9 @@ using Microsoft.VisualStudio.Services.Agent.Util;
 using Newtonsoft.Json;
 using System;
 using System.IO;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 
 namespace Microsoft.VisualStudio.Services.Agent.Worker.Build
 {
@@ -20,6 +23,8 @@ namespace Microsoft.VisualStudio.Services.Agent.Worker.Build
         void MarkForGarbageCollection(IExecutionContext executionContext, TrackingConfigBase config);
 
         void UpdateJobRunProperties(IExecutionContext executionContext, TrackingConfig config, string file);
+
+        void DisposeCollectedGarbage(IExecutionContext executionContext);
     }
 
     public sealed class TrackingManager : AgentService, ITrackingManager
@@ -135,6 +140,50 @@ namespace Microsoft.VisualStudio.Services.Agent.Worker.Build
             // Update the info properties and save the file.
             config.UpdateJobRunProperties(executionContext);
             WriteToFile(file, config);
+        }
+
+        public void DisposeCollectedGarbage(IExecutionContext executionContext)
+        {
+            Trace.Entering();
+
+            string gcDirectory = Path.Combine(
+                IOUtil.GetWorkPath(HostContext),
+                Constants.Build.Path.SourceRootMappingDirectory,
+                Constants.Build.Path.GarbageCollectionDirectory);
+
+            if (!Directory.Exists(gcDirectory))
+            {
+                executionContext.Debug($"No build directory need to be GC. '{gcDirectory}' doesn't exist.");
+                return;
+            }
+
+            IEnumerable<string> gcTrackingFiles = Directory.EnumerateFiles(gcDirectory, "*.json");
+            if (gcTrackingFiles == null || gcTrackingFiles.Count() == 0)
+            {
+                executionContext.Debug($"No build directory need to be GC. '{gcDirectory}' doesn't have any tracking file.");
+                return;
+            }
+
+            Trace.Info($"Find {gcTrackingFiles.Count()} GC tracking files.");
+            foreach (string gcFile in gcTrackingFiles)
+            {
+                try
+                {
+                    var gcConfig = LoadIfExists(executionContext, gcFile) as TrackingConfig;
+                    ArgUtil.NotNull(gcConfig, nameof(TrackingConfig));
+
+                    executionContext.Output($"Deleting '{gcConfig.BuildDirectory}'");
+                    IOUtil.DeleteDirectory(gcConfig.BuildDirectory, CancellationToken.None);
+
+                    executionContext.Output($"Delete gc tracking file after delete '{gcConfig.BuildDirectory}'");
+                    IOUtil.DeleteFile(gcFile);
+                }
+                catch (Exception ex)
+                {
+                    executionContext.Error($"Unable finish GC based on '{gcFile}'. Try it next time.");
+                    executionContext.Error(ex);
+                }
+            }
         }
 
         private void WriteToFile(string file, object value)

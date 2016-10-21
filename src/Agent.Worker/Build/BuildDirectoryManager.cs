@@ -18,6 +18,8 @@ namespace Microsoft.VisualStudio.Services.Agent.Worker.Build
             IExecutionContext executionContext,
             string description, string path,
             bool deleteExisting);
+
+        void CleanupDirectory(IExecutionContext executionContext);
     }
 
     public sealed class BuildDirectoryManager : AgentService, IBuildDirectoryManager
@@ -122,6 +124,14 @@ namespace Microsoft.VisualStudio.Services.Agent.Worker.Build
                 deleteExisting: cleanOption == BuildCleanOption.Source);
 
             return newConfig;
+        }
+
+        public void CleanupDirectory(IExecutionContext executionContext)
+        {
+            Trace.Entering();
+            ArgUtil.NotNull(executionContext, nameof(executionContext));
+            var trackingManager = HostContext.GetService<ITrackingManager>();
+            trackingManager.DisposeCollectedGarbage(executionContext);
         }
 
         private TrackingConfig ConvertToNewFormat(
