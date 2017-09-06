@@ -62,4 +62,4 @@ Troubleshooting tips are [located here](docs/troubleshooting.md)
 
 ## Contribute
 
-For developers that want to contribute, [read here](docs/contribute.md) on how to build and test.
+For Developers that want to contribute, [read here](docs/contribute.md) on how to build and test.
